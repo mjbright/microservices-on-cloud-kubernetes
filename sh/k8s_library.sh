@@ -1,78 +1,17 @@
 #!/bin/bash
 
 #GCP_PROJECT comes from external env var (for securitry reasons)
-export GCP_VERBOSITY='warning'
-export GCP_ZONE='us-central1-c'
-export GKE_CHANNEL='rapid'
-export GKE_VERSION='1.20.5-gke.1300'
-export GKE_NODES=3
-export GKE_MACHINE='n1-standard-2'
+## export GCP_VERBOSITY='warning'
+## export GCP_ZONE='us-central1-c'
+## export GKE_CHANNEL='rapid'
+## export GKE_VERSION='1.20.5-gke.1300'
+## export GKE_NODES=3
+## export GKE_MACHINE='n1-standard-2'
 export PROMETHEUS_NS='monitoring'
 export ISTIO_NS='istio-system'
 export ISTIO_VERSION=1.7.2
 export LITMUS_VERSION=1.8.1
 
-
-update_gcloud_sdk() 
-{
-  which gcloud
-  gcloud components install beta --quiet
-  gcloud components update --quiet
-  echo "gcloud path: $(which gcloud)"
-}
-
-gcloud_get_info() 
-{
-  echo '--- gcloud version ---'
-  gcloud version
-  echo '--- gcloud info ---'
-  gcloud info --anonymize
-}
-
-create_cluster() 
-{
-  local GKE_CLUSTER="$1"
-  echo "### list clusters [before create]:"
-  gcloud container clusters list --verbosity="$GCP_VERBOSITY" --project="$GCP_PROJECT" --quiet
-  echo "### create cluster: $GKE_CLUSTER"
-  # https://cloud.google.com/istio/docs/istio-on-gke/installing
-  # https://cloud.google.com/istio/docs/istio-on-gke/versions
-  # NB: Istio is still a 'beta' feature : see blelow
-  # --addons=Istio \
-  # --istio-config=auth='MTLS_PERMISSIVE' \
-  gcloud beta container clusters create "$GKE_CLUSTER" \
-      --cluster-version="$GKE_VERSION" \
-      --num-nodes="$GKE_NODES"  \
-      --machine-type="$GKE_MACHINE"  \
-      --project="$GCP_PROJECT"  \
-      --zone "$GCP_ZONE"  \
-      --release-channel "$GKE_CHANNEL"  \
-      --quiet \
-      --verbosity="$GCP_VERBOSITY"
-  echo "### list clusters [after create]:"
-  gcloud container clusters list --verbosity="$GCP_VERBOSITY" --project="$GCP_PROJECT"
-  echo "### check istio:"
-  kubectl get services -n "$ISTIO_NS"
-  kubectl get pods -n "$ISTIO_NS"
-}
-
-delete_cluster() 
-{
-  local GKE_CLUSTER="$1"
-  echo "### list clusters [before delete]:"
-  gcloud container clusters delete "$GKE_CLUSTER" \
-      --project="$GCP_PROJECT" \
-      --zone "$GCP_ZONE" \
-      --quiet \
-      --verbosity="$GCP_VERBOSITY" 
-  echo "#### list clusters [after delete]:"
-}
-
-gcloud_get_credentials() 
-{
-  echo "### get credentials & config for kubectl: "
-  gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GCP_ZONE" --project="$GCP_PROJECT"
-}
 
 cluster_info()
 {
@@ -106,6 +45,44 @@ deploy_k8s_dashboard()
   #kubectl create serviceaccount 'dashboard-admin-sa'
   #kubectl create clusterrolebinding 'dashboard-admin-sa' --clusterrole='cluster-admin' --serviceaccount='default:dashboard-admin-sa'
   #kubectl get secrets
+
+  kubectl -n kubernetes-dashboard expose deploy/kubernetes-dashboard  --name kubernetes-dashboard-np --target-port 8443 --port 443 --type NodePort
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-dashboard-admin
+  # "namespace" omitted since ClusterRoles are not namespaced
+rules:
+-  apiGroups: ["*"]
+   resources: ["*"]
+   verbs: ["get","list","watch"]
+EOF
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-dashboard-admin
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-dashboard
+    namespace: kubernetes-dashboard
+    apiGroup: ""
+roleRef:
+  kind: ClusterRole
+  name: kubernetes-dashboard-admin
+  #name: system:admin
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+  # See:
+  # - https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/
+  # - https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
+  kubectl -n kubernetes-dashboard create token kubernetes-dashboard > ~/tmp/kubernetes-dashboard.token
+  echo "Dashboard token written to file '~/tmp/kubernetes-dashboard.token'"
+  ls -al ~/tmp/kubernetes-dashboard.token
 }
 
 deploy_istio() 
@@ -169,10 +146,15 @@ analyze_istio_config()
 
 deploy_polaris() 
 {
-  kubectl apply -f https://github.com/FairwindsOps/polaris/releases/latest/download/dashboard.yaml
+  helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+  helm upgrade --install polaris fairwinds-stable/polaris --namespace polaris --create-namespace
+  kubectl port-forward --namespace polaris svc/polaris-dashboard 8080:80
+
+  #kubectl apply -f https://github.com/FairwindsOps/polaris/releases/latest/download/dashboard.yaml
   kubectl get namespaces | grep polaris
   kubectl wait --for=condition=available --timeout=500s deployment/polaris-dashboard -n polaris
   #kubectl port-forward --namespace polaris svc/polaris-dashboard 8080:80
+  kubectl expose --namespace polaris deploy/polaris-dashboard --type NodePort --name polaris-dashboard-np --port 8080
 }
 
 deploy_kube_hunter() 

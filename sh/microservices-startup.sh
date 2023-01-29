@@ -11,25 +11,11 @@ catch() {
 }
 
 # variables below can be inherited from environmemt
-if [[ -z ${GKE_CLUSTER+x} ]]   ; then export GKE_CLUSTER='microservice-demo-cluster' ; fi ; echo "gke cluster: $GKE_CLUSTER"
 if [[ -z ${APPL_VERSION+x} ]]  ; then export APPL_VERSION='v0.2.0' ; fi ; echo "appl version: $APPL_VERSION"
-if [[ -z ${GKE_CREATE+x} ]]    ; then export GKE_CREATE='true' ; fi ; echo "gke create: $GKE_CREATE"
 if [[ -z ${APPL_DEPLOY+x} ]]   ; then export APPL_DEPLOY='true' ; fi ; echo "appl deploy: $APPL_DEPLOY"
 if [[ -z ${APPL_NS+x} ]]       ; then export APPL_NS='default' ; fi ; echo "appl namespace: $APPL_DEPLOY"
 if [[ -z ${WITH_ISTIO+x} ]]    ; then export WITH_ISTIO='true' ; fi ; echo "with istio: $WITH_ISTIO" 
 if [[ -z ${APPL_DELETE+x} ]]   ; then export APPL_DELETE='false' ; fi ; echo "appl delete: $APPL_DELETE"
-if [[ -z ${GKE_DELETE+x} ]]    ; then export GKE_DELETE='false' ; fi ; echo "gke delete: $GKE_DELETE"
-
-update_gcloud_sdk
-
-gcloud_get_info
-
-if [[ "$GKE_CREATE" == *'true'* ]]
-then
-  create_cluster $GKE_CLUSTER
-fi
-
-gcloud_get_credentials
 
 deploy_k8s_dashboard
 
@@ -127,7 +113,3 @@ then
 
 fi
 
-if [[ "$GKE_DELETE" == *'true'* ]]
-then
-  delete_cluster $GKE_CLUSTER
-fi
