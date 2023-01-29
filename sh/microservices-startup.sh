@@ -2,8 +2,8 @@
 
 source "$(dirname $0)/k8s_library.sh"
 
-set -e
-trap 'catch $? $LINENO' EXIT
+#set -e
+#trap 'catch $? $LINENO' EXIT
 catch() {
   if [ "$1" != "0" ]; then
     echo "Error $1 occurred on $2"

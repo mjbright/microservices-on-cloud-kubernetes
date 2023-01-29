@@ -148,12 +148,11 @@ deploy_polaris()
 {
   helm repo add fairwinds-stable https://charts.fairwinds.com/stable
   helm upgrade --install polaris fairwinds-stable/polaris --namespace polaris --create-namespace
-  kubectl port-forward --namespace polaris svc/polaris-dashboard 8080:80
+  # kubectl port-forward --namespace polaris svc/polaris-dashboard 8080:80
 
   #kubectl apply -f https://github.com/FairwindsOps/polaris/releases/latest/download/dashboard.yaml
   kubectl get namespaces | grep polaris
   kubectl wait --for=condition=available --timeout=500s deployment/polaris-dashboard -n polaris
-  #kubectl port-forward --namespace polaris svc/polaris-dashboard 8080:80
   kubectl expose --namespace polaris deploy/polaris-dashboard --type NodePort --name polaris-dashboard-np --port 8080
 }
 
